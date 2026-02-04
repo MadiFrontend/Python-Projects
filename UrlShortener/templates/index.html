@@ -1,0 +1,228 @@
+<!-- templates/index.html -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>URL Shortener</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding-top: 50px;
+      }
+      .card {
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      }
+      .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+      }
+      .url-result {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        margin-top: 20px;
+        word-break: break-all;
+      }
+      .stats-card {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-top: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+          <div class="card p-4">
+            <h1 class="text-center mb-4">🔗 URL Shortener</h1>
+
+            <form id="shortenForm">
+              <div class="mb-3">
+                <label for="urlInput" class="form-label"
+                  >Enter URL to shorten:</label
+                >
+                <input
+                  type="url"
+                  class="form-control"
+                  id="urlInput"
+                  placeholder="https://example.com"
+                  required
+                />
+              </div>
+
+              <div class="mb-3">
+                <label for="customCode" class="form-label"
+                  >Custom short code (optional):</label
+                >
+                <input
+                  type="text"
+                  class="form-control"
+                  id="customCode"
+                  placeholder="my-custom-link"
+                  pattern="[a-zA-Z0-9_-]{3,20}"
+                />
+                <div class="form-text">
+                  3-20 characters, letters, numbers, hyphens, underscores only
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-primary w-100">
+                Shorten URL
+              </button>
+            </form>
+
+            <div id="resultContainer" class="url-result" style="display: none">
+              <h5>Short URL Created:</h5>
+              <div class="d-flex align-items-center">
+                <input
+                  type="text"
+                  class="form-control me-2"
+                  id="shortUrl"
+                  readonly
+                />
+                <button
+                  class="btn btn-outline-primary"
+                  onclick="copyToClipboard()"
+                >
+                  Copy
+                </button>
+              </div>
+              <div class="mt-2">
+                <a href="#" id="statsLink" target="_blank">View Statistics</a>
+              </div>
+            </div>
+
+            <div
+              id="errorContainer"
+              class="alert alert-danger mt-3"
+              style="display: none"
+            ></div>
+
+            <div class="mt-4">
+              <h5>How to use the API:</h5>
+              <div class="code-block bg-light p-3 rounded">
+                <code>
+                  POST {{ base_url }}/shorten<br />
+                  Content-Type: application/json<br />
+                  {<br />
+                  &nbsp;&nbsp;"url": "https://example.com",<br />
+                  &nbsp;&nbsp;"custom_code": "optional-custom-code"<br />
+                  }<br /><br />
+                  GET {{ base_url }}/api/stats/&lt;short_code&gt;
+                </code>
+              </div>
+            </div>
+          </div>
+
+          <div class="stats-card" id="statsContainer" style="display: none">
+            <h4>📊 Statistics</h4>
+            <div id="statsContent"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      document
+        .getElementById("shortenForm")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+
+          const urlInput = document.getElementById("urlInput").value;
+          const customCode = document.getElementById("customCode").value;
+          const errorContainer = document.getElementById("errorContainer");
+          const resultContainer = document.getElementById("resultContainer");
+
+          // Hide previous results/errors
+          errorContainer.style.display = "none";
+          resultContainer.style.display = "none";
+
+          try {
+            const response = await fetch("/shorten", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                url: urlInput,
+                custom_code: customCode || null,
+              }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+              const shortUrlInput = document.getElementById("shortUrl");
+              const statsLink = document.getElementById("statsLink");
+
+              shortUrlInput.value = data.short_url;
+              statsLink.href = `/api/stats/${data.short_code}`;
+
+              resultContainer.style.display = "block";
+              loadStats(data.short_code);
+            } else {
+              errorContainer.textContent = data.error || "An error occurred";
+              errorContainer.style.display = "block";
+            }
+          } catch (error) {
+            errorContainer.textContent = "Network error. Please try again.";
+            errorContainer.style.display = "block";
+          }
+        });
+
+      async function loadStats(shortCode) {
+        try {
+          const response = await fetch(`/api/stats/${shortCode}`);
+          if (response.ok) {
+            const stats = await response.json();
+            displayStats(stats);
+          }
+        } catch (error) {
+          console.error("Failed to load stats:", error);
+        }
+      }
+
+      function displayStats(stats) {
+        const statsContainer = document.getElementById("statsContainer");
+        const statsContent = document.getElementById("statsContent");
+
+        statsContent.innerHTML = `
+                <p><strong>Original URL:</strong> ${stats.original_url}</p>
+                <p><strong>Short Code:</strong> ${stats.short_code}</p>
+                <p><strong>Clicks:</strong> ${stats.clicks}</p>
+                <p><strong>Created:</strong> ${new Date(stats.created_at).toLocaleString()}</p>
+                <p><strong>Last Accessed:</strong> ${stats.last_accessed ? new Date(stats.last_accessed).toLocaleString() : "Never"}</p>
+            `;
+
+        statsContainer.style.display = "block";
+      }
+
+      function copyToClipboard() {
+        const shortUrlInput = document.getElementById("shortUrl");
+        shortUrlInput.select();
+        document.execCommand("copy");
+
+        const copyBtn = event.target;
+        const originalText = copyBtn.textContent;
+        copyBtn.textContent = "Copied!";
+        copyBtn.classList.remove("btn-outline-primary");
+        copyBtn.classList.add("btn-success");
+
+        setTimeout(() => {
+          copyBtn.textContent = originalText;
+          copyBtn.classList.remove("btn-success");
+          copyBtn.classList.add("btn-outline-primary");
+        }, 2000);
+      }
+    </script>
+  </body>
+</html>
